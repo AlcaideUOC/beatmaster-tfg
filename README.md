@@ -61,6 +61,12 @@ Las tareas actuales incluyen:
 
    Pronto subiré una versión para poder probarlo con el teclado del PC
 
+## Requisitos
+
+- Processing 4
+- Librería MIDI (The MidiBus)
+- Instrumento MIDI o controlador de percusión
+
 ## Contexto académico
 
 Este repositorio forma parte del Trabajo Fin de Grado titulado:
