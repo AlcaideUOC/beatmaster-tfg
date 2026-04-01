@@ -52,6 +52,15 @@ Las tareas actuales incluyen:
 - definición de la arquitectura del prototipo
 - desarrollo inicial de la lógica de detección rítmica
 
+## Cómo ejecutar el proyecto
+
+1. Descargar el repositorio.
+2. Abrir el archivo `BEATMASTER.pde` con Processing.
+3. Conectar un instrumento MIDI (por ejemplo una batería electrónica).
+4. Ejecutar el sketch desde Processing.
+
+   Pronto subiré una versión para poder probarlo con el teclado del PC
+
 ## Contexto académico
 
 Este repositorio forma parte del Trabajo Fin de Grado titulado:
