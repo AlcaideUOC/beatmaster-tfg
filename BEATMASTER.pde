@@ -1,134 +1,218 @@
+/*
+BeatMaster
+
+Primera versión del proyecto.
+
+En esta fase solo quiero comprobar que Processing recibe correctamente
+las notas MIDI de la batería electrónica. Antes de implementar sonidos
+o mecánicas de juego, es importante verificar que el sistema detecta
+los golpes del instrumento.
+
+También he añadido control por teclado para poder probar el programa
+aunque no haya un dispositivo MIDI conectado.
+*/
+
 import javax.sound.midi.*;
-import ddf.minim.*;
 
-// Estados básicos de la aplicación
-final int INICIO = 0;
-final int GRABANDO = 1;
-int estado = INICIO;
+// Notas MIDI típicas de batería
+final int MIDI_BOMBO = 36;
+final int MIDI_CAJA = 38;
+final int MIDI_CHARLES = 46;
+final int MIDI_PLATO = 49;
 
-// Objetos de audio
-Minim minim;
-AudioSample sBombo, sCaja, sCharles, sPlato;
+// Variable donde guardaré el dispositivo MIDI
+MidiDevice device;
 
-// Indica si se ha detectado un dispositivo MIDI
-boolean midiConectado = false;
+// Información que se mostrará en pantalla
+String ultimoGolpe = "Esperando entrada...";
+int velocidad = 0;
 
-// Tiempo inicial del programa
-int tiempoInicio;
 
-// Texto principal
-String mensaje = "Iniciando sistema...";
+// --------------------------------------------------
+// setup()
+// Aquí se inicializa la ventana y se prepara la conexión MIDI
+// --------------------------------------------------
 
-void setup() {
-  size(900, 600);
-  textAlign(CENTER, CENTER);
+void setup(){
 
-  // Inicialización del sistema de audio
-  minim = new Minim(this);
+  size(900,600);
 
-  // Carga de sonidos desde la carpeta data
-  sBombo   = minim.loadSample("bombo.wav", 256);
-  sCaja    = minim.loadSample("caja.wav", 256);
-  sCharles = minim.loadSample("charles.wav", 256);
-  sPlato   = minim.loadSample("plato.wav", 256);
+  textAlign(CENTER,CENTER);
+  textSize(32);
 
-  // Se intenta establecer conexión con el dispositivo MIDI
-  conectarHardware();
+  iniciarMIDI();
 
-  // Se guarda el instante inicial del programa
-  tiempoInicio = millis();
 }
 
-void draw() {
-  background(15);
+
+// --------------------------------------------------
+// draw()
+// Se ejecuta continuamente y muestra la información en pantalla
+// --------------------------------------------------
+
+void draw(){
+
+  background(20);
 
   fill(255);
-  textSize(36);
+  text("BeatMaster - prueba de entrada", width/2, 80);
 
-  if (!midiConectado) {
-    mensaje = "No se ha detectado dispositivo MIDI";
-    text(mensaje, width/2, height/2);
-    return;
-  }
-
-  if (estado == INICIO) {
-    mensaje = "¡Preparado!";
-    text(mensaje, width/2, height/2);
-
-    // Después de dos segundos pasa al estado de grabación
-    if (millis() - tiempoInicio >= 2000) {
-      estado = GRABANDO;
-    }
-  }
-
-  else if (estado == GRABANDO) {
-    mensaje = "Grabando...";
-    text(mensaje, width/2, height/2);
-
-    // Indicador visual de grabación
-    fill(255, 0, 0, sin(frameCount * 0.1) * 100 + 155);
-    ellipse(60, 60, 20, 20);
-  }
-
-  // Texto informativo para salir del programa
   fill(200);
-  textSize(16);
-  text("Pulsa ESC para salir de BeatMaster", width/2, height - 40);
+  text("Último golpe detectado:", width/2, 220);
+
+  fill(255,200,0);
+  text(ultimoGolpe, width/2, 300);
+
+  fill(180);
+  text("Velocidad: " + velocidad, width/2, 360);
+
+  fill(120);
+  text("Teclado de prueba", width/2, 470);
+
+  textSize(18);
+  text("A = bombo   S = caja   D = charles   F = plato", width/2, 510);
+
+  textSize(32);
+
 }
 
-// Reproducción de sonidos según la nota MIDI recibida
-void gestionarInput(int nota, int vel) {
-  if (nota == 36) sBombo.trigger();
-  if (nota == 38) sCaja.trigger();
-  if (nota == 41) sPlato.trigger();
-  if (nota == 46) sCharles.trigger();
-}
 
-// Búsqueda de un dispositivo MIDI de entrada
-void conectarHardware() {
-  MidiDevice.Info[] infos = MidiSystem.getMidiDeviceInfo();
+// --------------------------------------------------
+// iniciarMIDI()
+// Busca dispositivos MIDI disponibles y se conecta al primero
+// que pueda enviar datos
+// --------------------------------------------------
 
-  for (MidiDevice.Info info : infos) {
-    if ((info.getName().contains("UM-ONE") || info.getName().toUpperCase().contains("MIDI")) && getIn(info)) {
-      try {
-        MidiDevice dev = MidiSystem.getMidiDevice(info);
-        dev.getTransmitter().setReceiver(new MidiInputReceiver());
-        dev.open();
-        midiConectado = true;
-        break;
-      } catch (Exception e) {
+void iniciarMIDI(){
+
+  try{
+
+    MidiDevice.Info[] infos = MidiSystem.getMidiDeviceInfo();
+
+    for(int i=0;i<infos.length;i++){
+
+      MidiDevice dispositivo = MidiSystem.getMidiDevice(infos[i]);
+
+      // Solo nos interesan los dispositivos que transmiten datos
+      if(dispositivo.getMaxTransmitters()!=0){
+
+        device = dispositivo;
+        device.open();
+
+        Transmitter transmitter = device.getTransmitter();
+        transmitter.setReceiver(new BeatMasterReceiver());
+
+        println("Dispositivo MIDI conectado: " + infos[i].getName());
+        return;
+
       }
+
     }
+
+    println("No se encontró dispositivo MIDI.");
+
   }
+  catch(Exception e){
+
+    e.printStackTrace();
+
+  }
+
 }
 
-// Receptor de mensajes MIDI
-class MidiInputReceiver implements Receiver {
-  public void send(MidiMessage msg, long timeStamp) {
-    byte[] b = msg.getMessage();
 
-    if (b.length >= 3 && (b[0] & 0xFF) >= 144 && (b[2] & 0xFF) > 0) {
-      gestionarInput(b[1] & 0xFF, b[2] & 0xFF);
+// --------------------------------------------------
+// Clase que recibe los mensajes MIDI
+// --------------------------------------------------
+
+class BeatMasterReceiver implements Receiver{
+
+  public void send(MidiMessage message,long timeStamp){
+
+    if(message instanceof ShortMessage){
+
+      ShortMessage sm = (ShortMessage)message;
+
+      // Nos interesan los NOTE_ON
+      if(sm.getCommand()==ShortMessage.NOTE_ON){
+
+        int nota = sm.getData1();
+        int vel = sm.getData2();
+
+        // Si la velocidad es mayor que 0 significa que se ha golpeado
+        if(vel>0){
+
+          gestionarInput(nota,vel);
+
+        }
+
+      }
+
     }
+
   }
 
-  public void close() {
-  }
+  public void close(){}
+
 }
 
-// Permite salir del programa con la tecla ESC
-void keyPressed() {
-  if (keyCode == ESC) {
+
+// --------------------------------------------------
+// gestionarInput()
+// Interpreta la nota recibida y la traduce a un instrumento
+// --------------------------------------------------
+
+void gestionarInput(int nota,int vel){
+
+  velocidad = vel;
+
+  if(nota==MIDI_BOMBO){
+
+    ultimoGolpe = "BOMBO";
+
+  }
+  else if(nota==MIDI_CAJA){
+
+    ultimoGolpe = "CAJA";
+
+  }
+  else if(nota==MIDI_CHARLES){
+
+    ultimoGolpe = "CHARLES";
+
+  }
+  else if(nota==MIDI_PLATO){
+
+    ultimoGolpe = "PLATO";
+
+  }
+  else{
+
+    ultimoGolpe = "Nota MIDI: " + nota;
+
+  }
+
+}
+
+
+// --------------------------------------------------
+// keyPressed()
+// Permite probar el sistema usando el teclado
+// --------------------------------------------------
+
+void keyPressed(){
+
+  // ESC para cerrar el programa
+  if(keyCode==ESC){
+
+    key=0;
     exit();
-  }
-}
 
-// Comprueba si el dispositivo puede transmitir datos MIDI
-boolean getIn(MidiDevice.Info info) {
-  try {
-    return MidiSystem.getMidiDevice(info).getMaxTransmitters() != 0;
   }
-  catch (Exception e) {
-    return false;
-  }
+
+  if(key=='a'||key=='A') gestionarInput(MIDI_BOMBO,100);
+  if(key=='s'||key=='S') gestionarInput(MIDI_CAJA,100);
+  if(key=='d'||key=='D') gestionarInput(MIDI_CHARLES,100);
+  if(key=='f'||key=='F') gestionarInput(MIDI_PLATO,100);
+
 }
