@@ -1,218 +1,318 @@
+import javax.sound.midi.*;
+
 /*
 BeatMaster
 
-Primera versión del proyecto.
+Esta versión parte de la primera prueba de entrada MIDI.
+El objetivo sigue siendo comprobar que Processing recibe correctamente
+los golpes de una batería electrónica, pero se añade una interfaz más
+clara y un pequeño registro de los golpes detectados.
 
-En esta fase solo quiero comprobar que Processing recibe correctamente
-las notas MIDI de la batería electrónica. Antes de implementar sonidos
-o mecánicas de juego, es importante verificar que el sistema detecta
-los golpes del instrumento.
+También se mantiene el control por teclado para poder probar el programa
+aunque no haya ningún dispositivo MIDI conectado.
 
-También he añadido control por teclado para poder probar el programa
-aunque no haya un dispositivo MIDI conectado.
+En esta fase todavía no hay grabación de patrones, guardado de archivos
+ni mecánica jugable.
 */
 
-import javax.sound.midi.*;
 
-// Notas MIDI típicas de batería
-final int MIDI_BOMBO = 36;
-final int MIDI_CAJA = 38;
+// ─────────────────────────────
+// Notas MIDI principales
+// ─────────────────────────────
+
+final int MIDI_BOMBO   = 36;
+final int MIDI_CAJA    = 38;
 final int MIDI_CHARLES = 46;
-final int MIDI_PLATO = 49;
+final int MIDI_PLATO   = 49;
 
-// Variable donde guardaré el dispositivo MIDI
+
+// ─────────────────────────────
+// Variables de entrada MIDI
+// ─────────────────────────────
+
 MidiDevice device;
+Receiver receiver;
 
-// Información que se mostrará en pantalla
+boolean midiConectado = false;
+String infoMIDI = "Buscando dispositivo MIDI...";
+
+
+// ─────────────────────────────
+// Información del último golpe
+// ─────────────────────────────
+
 String ultimoGolpe = "Esperando entrada...";
+int ultimaNota = 0;
 int velocidad = 0;
+int totalGolpes = 0;
 
 
-// --------------------------------------------------
+// ─────────────────────────────
+// Contadores por instrumento
+// ─────────────────────────────
+
+int golpesBombo = 0;
+int golpesCaja = 0;
+int golpesCharles = 0;
+int golpesPlato = 0;
+int golpesOtros = 0;
+
+
+// ─────────────────────────────
+// Colores de la interfaz
+// ─────────────────────────────
+
+int colFondo = color(20);
+int colTexto = color(240);
+int colTextoSuave = color(170);
+int colAcento = color(255, 200, 0);
+int colPanel = color(45, 50, 70);
+
+
+// ─────────────────────────────
 // setup()
-// Aquí se inicializa la ventana y se prepara la conexión MIDI
-// --------------------------------------------------
+// Inicializa la ventana y prepara la conexión MIDI
+// ─────────────────────────────
 
-void setup(){
+void setup() {
+  size(900, 600);
 
-  size(900,600);
+  surface.setTitle("BeatMaster - prueba MIDI ampliada");
 
-  textAlign(CENTER,CENTER);
-  textSize(32);
+  textAlign(CENTER, CENTER);
+  textSize(28);
 
   iniciarMIDI();
-
 }
 
 
-// --------------------------------------------------
+// ─────────────────────────────
 // draw()
-// Se ejecuta continuamente y muestra la información en pantalla
-// --------------------------------------------------
+// Muestra en pantalla la información de entrada
+// ─────────────────────────────
 
-void draw(){
+void draw() {
+  background(colFondo);
 
-  background(20);
-
-  fill(255);
-  text("BeatMaster - prueba de entrada", width/2, 80);
-
-  fill(200);
-  text("Último golpe detectado:", width/2, 220);
-
-  fill(255,200,0);
-  text(ultimoGolpe, width/2, 300);
-
-  fill(180);
-  text("Velocidad: " + velocidad, width/2, 360);
-
-  fill(120);
-  text("Teclado de prueba", width/2, 470);
-
-  textSize(18);
-  text("A = bombo   S = caja   D = charles   F = plato", width/2, 510);
-
-  textSize(32);
-
+  dibujarTitulo();
+  dibujarPanelPrincipal();
+  dibujarContadores();
+  dibujarAyudaTeclado();
+  dibujarEstadoMIDI();
 }
 
 
-// --------------------------------------------------
+// ─────────────────────────────
+// Título principal
+// ─────────────────────────────
+
+void dibujarTitulo() {
+  fill(colAcento);
+  textSize(40);
+  text("BeatMaster", width/2, 55);
+
+  fill(colTextoSuave);
+  textSize(18);
+  text("Prueba ampliada de entrada MIDI", width/2, 95);
+}
+
+
+// ─────────────────────────────
+// Panel central con el último golpe detectado
+// ─────────────────────────────
+
+void dibujarPanelPrincipal() {
+  noStroke();
+  fill(colPanel);
+  rect(90, 135, width - 180, 210, 18);
+
+  fill(colTextoSuave);
+  textSize(20);
+  text("Último golpe detectado", width/2, 175);
+
+  fill(colAcento);
+  textSize(42);
+  text(ultimoGolpe, width/2, 235);
+
+  fill(colTexto);
+  textSize(20);
+  text("Nota MIDI: " + ultimaNota, width/2, 290);
+  text("Velocidad: " + velocidad, width/2, 320);
+}
+
+
+// ─────────────────────────────
+// Contadores de golpes por instrumento
+// ─────────────────────────────
+
+void dibujarContadores() {
+  fill(colTexto);
+  textSize(20);
+  text("Golpes registrados: " + totalGolpes, width/2, 380);
+
+  fill(colTextoSuave);
+  textSize(16);
+  text("Bombo: " + golpesBombo +
+       "   Caja: " + golpesCaja +
+       "   Charles: " + golpesCharles +
+       "   Plato: " + golpesPlato +
+       "   Otros: " + golpesOtros, width/2, 420);
+}
+
+
+// ─────────────────────────────
+// Instrucciones para probar con teclado
+// ─────────────────────────────
+
+void dibujarAyudaTeclado() {
+  fill(colTextoSuave);
+  textSize(16);
+  text("Teclado de prueba", width/2, 485);
+
+  fill(colTexto);
+  text("A = bombo   S = caja   D = charles   F = plato", width/2, 515);
+
+  fill(colTextoSuave);
+  text("ESC = salir", width/2, 545);
+}
+
+
+// ─────────────────────────────
+// Estado de la conexión MIDI
+// ─────────────────────────────
+
+void dibujarEstadoMIDI() {
+  fill(colTextoSuave);
+  textAlign(LEFT, BOTTOM);
+  textSize(13);
+  text(infoMIDI, 16, height - 14);
+
+  textAlign(CENTER, CENTER);
+}
+
+
+// ─────────────────────────────
 // iniciarMIDI()
-// Busca dispositivos MIDI disponibles y se conecta al primero
-// que pueda enviar datos
-// --------------------------------------------------
+// Busca dispositivos MIDI disponibles y conecta el primero válido
+// ─────────────────────────────
 
-void iniciarMIDI(){
-
-  try{
-
+void iniciarMIDI() {
+  try {
     MidiDevice.Info[] infos = MidiSystem.getMidiDeviceInfo();
 
-    for(int i=0;i<infos.length;i++){
-
+    for (int i = 0; i < infos.length; i++) {
       MidiDevice dispositivo = MidiSystem.getMidiDevice(infos[i]);
 
-      // Solo nos interesan los dispositivos que transmiten datos
-      if(dispositivo.getMaxTransmitters()!=0){
-
+      if (dispositivo.getMaxTransmitters() != 0) {
         device = dispositivo;
         device.open();
 
         Transmitter transmitter = device.getTransmitter();
-        transmitter.setReceiver(new BeatMasterReceiver());
+        receiver = new BeatMasterReceiver();
 
-        println("Dispositivo MIDI conectado: " + infos[i].getName());
+        transmitter.setReceiver(receiver);
+
+        midiConectado = true;
+        infoMIDI = "MIDI conectado: " + infos[i].getName();
+
+        println(infoMIDI);
         return;
-
       }
-
     }
 
-    println("No se encontró dispositivo MIDI.");
-
+    midiConectado = false;
+    infoMIDI = "No se encontró dispositivo MIDI. Puedes usar el teclado.";
+    println(infoMIDI);
   }
-  catch(Exception e){
-
+  catch(Exception e) {
+    midiConectado = false;
+    infoMIDI = "Error al iniciar MIDI. Puedes usar el teclado.";
     e.printStackTrace();
-
   }
-
 }
 
 
-// --------------------------------------------------
+// ─────────────────────────────
 // Clase que recibe los mensajes MIDI
-// --------------------------------------------------
+// ─────────────────────────────
 
-class BeatMasterReceiver implements Receiver{
+class BeatMasterReceiver implements Receiver {
 
-  public void send(MidiMessage message,long timeStamp){
+  public void send(MidiMessage message, long timeStamp) {
+    if (message instanceof ShortMessage) {
+      ShortMessage sm = (ShortMessage) message;
 
-    if(message instanceof ShortMessage){
-
-      ShortMessage sm = (ShortMessage)message;
-
-      // Nos interesan los NOTE_ON
-      if(sm.getCommand()==ShortMessage.NOTE_ON){
-
+      if (sm.getCommand() == ShortMessage.NOTE_ON) {
         int nota = sm.getData1();
         int vel = sm.getData2();
 
-        // Si la velocidad es mayor que 0 significa que se ha golpeado
-        if(vel>0){
-
-          gestionarInput(nota,vel);
-
+        if (vel > 0) {
+          gestionarInput(nota, vel);
         }
-
       }
-
     }
-
   }
 
-  public void close(){}
-
+  public void close() {
+  }
 }
 
 
-// --------------------------------------------------
+// ─────────────────────────────
 // gestionarInput()
-// Interpreta la nota recibida y la traduce a un instrumento
-// --------------------------------------------------
+// Interpreta la nota recibida y actualiza la información visual
+// ─────────────────────────────
 
-void gestionarInput(int nota,int vel){
-
+void gestionarInput(int nota, int vel) {
+  ultimaNota = nota;
   velocidad = vel;
+  totalGolpes++;
 
-  if(nota==MIDI_BOMBO){
-
+  if (nota == MIDI_BOMBO) {
     ultimoGolpe = "BOMBO";
-
-  }
-  else if(nota==MIDI_CAJA){
-
+    golpesBombo++;
+  } else if (nota == MIDI_CAJA) {
     ultimoGolpe = "CAJA";
-
-  }
-  else if(nota==MIDI_CHARLES){
-
+    golpesCaja++;
+  } else if (nota == MIDI_CHARLES) {
     ultimoGolpe = "CHARLES";
-
-  }
-  else if(nota==MIDI_PLATO){
-
+    golpesCharles++;
+  } else if (nota == MIDI_PLATO) {
     ultimoGolpe = "PLATO";
-
-  }
-  else{
-
-    ultimoGolpe = "Nota MIDI: " + nota;
-
+    golpesPlato++;
+  } else {
+    ultimoGolpe = "OTRA NOTA";
+    golpesOtros++;
   }
 
+  println("Nota MIDI: " + nota + " | Velocidad: " + vel);
 }
 
 
-// --------------------------------------------------
+// ─────────────────────────────
 // keyPressed()
 // Permite probar el sistema usando el teclado
-// --------------------------------------------------
+// ─────────────────────────────
 
-void keyPressed(){
-
-  // ESC para cerrar el programa
-  if(keyCode==ESC){
-
-    key=0;
+void keyPressed() {
+  if (keyCode == ESC) {
+    key = 0;
     exit();
-
   }
 
-  if(key=='a'||key=='A') gestionarInput(MIDI_BOMBO,100);
-  if(key=='s'||key=='S') gestionarInput(MIDI_CAJA,100);
-  if(key=='d'||key=='D') gestionarInput(MIDI_CHARLES,100);
-  if(key=='f'||key=='F') gestionarInput(MIDI_PLATO,100);
+  if (key == 'a' || key == 'A') {
+    gestionarInput(MIDI_BOMBO, 100);
+  }
 
+  if (key == 's' || key == 'S') {
+    gestionarInput(MIDI_CAJA, 100);
+  }
+
+  if (key == 'd' || key == 'D') {
+    gestionarInput(MIDI_CHARLES, 100);
+  }
+
+  if (key == 'f' || key == 'F') {
+    gestionarInput(MIDI_PLATO, 100);
+  }
 }
