@@ -11,7 +11,7 @@ import java.text.SimpleDateFormat;
 // Este es mi proyecto BeatMaster. La idea es un videojuego musical
 // similar al Guitar Hero pero para batería y percusión.
 //
-// Funcoinalidades principales:
+// Funcionalidades principales:
 //   1. Cargo una canción en MP3.
 //   2. Grabo los golpes que voy dando mientras suena.
 //   3. Luego puedo jugar esa grabación en dos modos distintos.
